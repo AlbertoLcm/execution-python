@@ -8,6 +8,9 @@ on:
 jobs:
   playwright-job:
     runs-on: ubuntu-latest
+    environment: credentials
+    timeout-minutes: 10 # IMPORTANTE: Evita que se quede colgado por horas
+
     steps:
       - name: Checkout del código
         uses: actions/checkout@v4
@@ -16,15 +19,44 @@ jobs:
         uses: actions/setup-python@v4
         with:
           python-version: '3.10'
+          cache: 'pip' # OPTIMIZACIÓN: Guarda en caché las librerías instaladas
 
-      - name: Instalar dependencias de Python
+      - name: Instalar dependencias
         run: |
           python -m pip install --upgrade pip
-          pip install playwright pytest-playwright
-          pip install -r requirements.txt
+          # Instala requirements si existe, sino instala lo básico
+          if [ -f requirements.txt ]; then
+            pip install -r requirements.txt
+          else
+            pip install playwright pytest-playwright
+          fi
 
       - name: Instalar Navegadores de Playwright
+        # Instalamos solo Chromium para ahorrar tiempo
         run: playwright install --with-deps chromium
 
       - name: Ejecutar script Async
+        env:
+          # Mapeo de secretos (sin cambios, salvo el último)
+          SHEET_ID: ${{ secrets.SHEET_ID }}
+          CNBV_USER: ${{ secrets.CNBV_USER }}
+          CNBV_PASS: ${{ secrets.CNBV_PASS }}
+          EMAIL_USER: ${{ secrets.EMAIL_USER }}
+          EMAIL_PASS: ${{ secrets.EMAIL_PASS }}
+          EMAIL_DEST: ${{ secrets.EMAIL_DEST }}
+          URL_LOGIN: ${{ secrets.URL_LOGIN }}
+          URL_CONSULTA: ${{ secrets.URL_CONSULTA }}
+          # Credenciales GCP
+          GCP_TYPE: ${{ secrets.GCP_TYPE }}
+          GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+          GCP_PRIVATE_KEY_ID: ${{ secrets.GCP_PRIVATE_KEY_ID }}
+          GCP_PRIVATE_KEY: ${{ secrets.GCP_PRIVATE_KEY }}
+          GCP_CLIENT_EMAIL: ${{ secrets.GCP_CLIENT_EMAIL }}
+          GCP_CLIENT_ID: ${{ secrets.GCP_CLIENT_ID }}
+          GCP_AUTH_URI: ${{ secrets.GCP_AUTH_URI }}
+          GCP_TOKEN_URI: ${{ secrets.GCP_TOKEN_URI }}
+          GCP_AUTH_PROVIDER_X509_CERT_URL: ${{ secrets.GCP_AUTH_PROVIDER_X509_CERT_URL }}
+          GCP_CLIENT_X509_CERT_URL: ${{ secrets.GCP_CLIENT_X509_CERT_URL }}
+          GCP_UNIVERSE_DOMAIN: ${{ secrets.GCP_UNIVERSE_DOMAIN }} 
+        
         run: python main.py
