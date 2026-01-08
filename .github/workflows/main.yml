@@ -8,6 +8,7 @@ on:
 jobs:
   playwright-job:
     runs-on: ubuntu-latest
+    environment: credentials
     timeout-minutes: 10 # IMPORTANTE: Evita que se quede colgado por horas
 
     steps:
