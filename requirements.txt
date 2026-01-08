@@ -1,0 +1,9 @@
+pandas
+playwright
+gspread
+oauth2client
+gspread-dataframe
+python-dotenv
+lxml
+html5lib
+openpyxl
