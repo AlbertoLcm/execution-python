@@ -1,15 +1,15 @@
-name: Ejecutar Playwright Async cada 15 min
+name: Ejecutar Playwright Async cada 20 min
 
 on:
   schedule:
-    - cron: '*/15 * * * *'
+    - cron: '*/20 * * * *'
   workflow_dispatch:
 
 jobs:
   playwright-job:
     runs-on: ubuntu-latest
     environment: credentials
-    timeout-minutes: 10 # IMPORTANTE: Evita que se quede colgado por horas
+    timeout-minutes: 5 # IMPORTANTE: Evita que se quede colgado por horas
 
     steps:
       - name: Checkout del código
