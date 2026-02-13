@@ -1,8 +1,8 @@
-name: Ejecutar Playwright Async cada 15 min
+name: Ejecutar Playwright Async cada 20 min
 
 on:
   schedule:
-    - cron: '*/15 * * * 1-5'
+    - cron: '*/20 * * * 1-5'
   workflow_dispatch:
 
 jobs:
