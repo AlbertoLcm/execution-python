@@ -8,6 +8,8 @@ from oauth2client.service_account import ServiceAccountCredentials
 from gspread_dataframe import set_with_dataframe
 import os
 from dotenv import load_dotenv
+import requests
+import json
 
 # Cargar las variables del archivo .env al entorno del sistema
 load_dotenv()
@@ -20,7 +22,8 @@ CONFIG = {
     "EMAIL_PASS": os.getenv("EMAIL_PASS"),
     "EMAIL_DEST": os.getenv("EMAIL_DEST"),
     "URL_LOGIN": os.getenv("URL_LOGIN"),
-    "URL_CONSULTA": os.getenv("URL_CONSULTA")
+    "URL_CONSULTA": os.getenv("URL_CONSULTA"),
+    "CHAT_WEBHOOK_URL": os.getenv("CHAT_WEBHOOK_URL")
 }
 
 URLS = {
@@ -58,13 +61,56 @@ gc = get_gspread_client()
 
 # ================= NOTIFICACIONES =================
 
+def enviar_alerta_chat(df_nuevos):
+    """
+    Envía un mensaje a Google Chat con el resumen de los datos nuevos.
+    """
+    webhook_url = CONFIG.get("CHAT_WEBHOOK_URL")
+    
+    if not webhook_url:
+        print("[WARN] No hay URL de Webhook configurada. No se enviará mensaje a Chat.")
+        return
+
+    cantidad = len(df_nuevos)
+    
+    resumen_areas = ""
+    if 'Area' in df_nuevos.columns:
+        conteo = df_nuevos['Area'].value_counts()
+        for area, total in conteo.items():
+            resumen_areas += f"\n• {area}: {total} registro(s)"
+
+    mensaje_texto = (
+        f"🚨 *¡Nuevos rechazos (CNBV)!*\n\n"
+        f"Se han detectado y guardado *{cantidad}* registros nuevos.\n"
+        f"{resumen_areas}\n\n"
+        f"Revisa la hoja 'Novedades' para más detalles:\n"
+        f"{URLS['SHEET_BASE']}"
+    )
+
+    payload = {
+        "text": mensaje_texto
+    }
+
+    try:
+        response = requests.post(
+            webhook_url, 
+            data=json.dumps(payload), 
+            headers={'Content-Type': 'application/json'}
+        )
+        
+        if response.status_code == 200:
+            print("[CHAT] 🔔 Mensaje enviado exitosamente a Google Chat.")
+        else:
+            print(f"[ERROR CHAT] Fallo al enviar mensaje. HTTP Status: {response.status_code}")
+            print(response.text)
+    except Exception as e:
+        print(f"[ERROR CHAT] Excepción al enviar webhook: {e}")
+
 def notificar_novedades(nuevos_registros):
-    """Escribe en la hoja Novedades y opcionalmente envía correo"""
     try:
         spreadsheet = gc.open_by_key(CONFIG['SHEET_ID'])
         worksheet = spreadsheet.worksheet('Novedades')
         
-        # Limpiamos y escribimos
         worksheet.clear()
         set_with_dataframe(worksheet, nuevos_registros)
         print("[GSPREAD] Hoja 'Novedades' actualizada.")
@@ -114,6 +160,9 @@ def procesar_datos(df_nuevo):
             
             # Notificar
             notificar_novedades(nuevos_reales)
+
+            # Enviar Chat
+            enviar_alerta_chat(nuevos_reales)
         else:
             print("[INFO] zzz Los datos escaneados ya existen en la base.")
 
