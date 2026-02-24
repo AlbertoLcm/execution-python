@@ -58,5 +58,7 @@ jobs:
           GCP_AUTH_PROVIDER_X509_CERT_URL: ${{ secrets.GCP_AUTH_PROVIDER_X509_CERT_URL }}
           GCP_CLIENT_X509_CERT_URL: ${{ secrets.GCP_CLIENT_X509_CERT_URL }}
           GCP_UNIVERSE_DOMAIN: ${{ secrets.GCP_UNIVERSE_DOMAIN }} 
+
+          CHAT_WEBHOOK_URL: ${{ secrets.CHAT_WEBHOOK_URL }}
         
         run: python main.py
