@@ -11,25 +11,28 @@ from dotenv import load_dotenv
 import requests
 import json
 
+
 # Cargar las variables del archivo .env al entorno del sistema
 load_dotenv()
 # ================= CONFIGURACIÓN SEGURA =================
 CONFIG = {
     "SHEET_ID": os.getenv("SHEET_ID"),
+    "SHEET_ID_MONITOREO": os.getenv("SHEET_ID_MONITOREO"),
     "CNBV_USER": os.getenv("CNBV_USER"),
     "CNBV_PASS": os.getenv("CNBV_PASS"),
-    "EMAIL_USER": os.getenv("EMAIL_USER"),
-    "EMAIL_PASS": os.getenv("EMAIL_PASS"),
-    "EMAIL_DEST": os.getenv("EMAIL_DEST"),
     "URL_LOGIN": os.getenv("URL_LOGIN"),
     "URL_CONSULTA": os.getenv("URL_CONSULTA"),
-    "CHAT_WEBHOOK_URL": os.getenv("CHAT_WEBHOOK_URL")
+    "CHAT_WEBHOOK_DATA": os.getenv("CHAT_WEBHOOK_DATA"),
+    "CHAT_WEBHOOK_ESP": os.getenv("CHAT_WEBHOOK_ESP"),
+    "CHAT_WEBHOOK_HAC": os.getenv("CHAT_WEBHOOK_HAC"),
+    "CHAT_WEBHOOK_ASEG": os.getenv("CHAT_WEBHOOK_ASEG"),
 }
 
 URLS = {
     "LOGIN": CONFIG['URL_LOGIN'],
     "CONSULTA": CONFIG['URL_CONSULTA'],
-    "SHEET_BASE": f"https://docs.google.com/spreadsheets/d/{CONFIG['SHEET_ID']}"
+    "SHEET_BASE": f"https://docs.google.com/spreadsheets/d/{CONFIG['SHEET_ID']}",
+    "SHEET_MONITOREO": f"https://docs.google.com/spreadsheets/d/{CONFIG['SHEET_ID_MONITOREO']}"
 }
 
 info_credentials_gcp = {
@@ -65,46 +68,76 @@ def enviar_alerta_chat(df_nuevos):
     """
     Envía un mensaje a Google Chat con el resumen de los datos nuevos.
     """
-    webhook_url = CONFIG.get("CHAT_WEBHOOK_URL")
+    webhook_data = CONFIG.get("CHAT_WEBHOOK_DATA")
+    webhook_esp = CONFIG.get("CHAT_WEBHOOK_ESP")
+    webhook_hac = CONFIG.get("CHAT_WEBHOOK_HAC")
+    webhook_aseg = CONFIG.get("CHAT_WEBHOOK_ASEG")
     
-    if not webhook_url:
+    if not any([webhook_data, webhook_esp, webhook_hac, webhook_aseg]):
         print("[WARN] No hay URL de Webhook configurada. No se enviará mensaje a Chat.")
         return
-
-    cantidad = len(df_nuevos)
     
-    resumen_areas = ""
-    if 'Area' in df_nuevos.columns:
-        conteo = df_nuevos['Area'].value_counts()
-        for area, total in conteo.items():
-            resumen_areas += f"\n• {area}: {total} registro(s)"
-
-    mensaje_texto = (
-        f"🚨 *¡Nuevos rechazos (CNBV)!*\n\n"
-        f"Se han detectado y guardado *{cantidad}* registros nuevos.\n"
-        f"{resumen_areas}\n\n"
-        f"Revisa la hoja 'Novedades' para más detalles:\n"
-        f"{URLS['SHEET_BASE']}"
-    )
-
-    payload = {
-        "text": mensaje_texto
+    rutas_webhooks = {
+        # 'Hacendario': [webhook_hac],
+        'Operaciones Ilícitas': [webhook_esp, webhook_aseg], 
+        # 'Aseguramiento': [webhook_aseg],
     }
 
-    try:
-        response = requests.post(
-            webhook_url, 
-            data=json.dumps(payload), 
-            headers={'Content-Type': 'application/json'}
-        )
+    def despachar_mensaje(url, payload, nombre_area):
+        if not url:
+            return
+        try:
+            response = requests.post(url, json=payload)
+            if response.status_code == 200:
+                print(f"[CHAT] Mensaje enviado exitosamente a {nombre_area}.")
+            else:
+                print(f"[ERROR CHAT] Fallo al enviar a {nombre_area}. HTTP: {response.status_code}")
+        except Exception as e:
+            print(f"[ERROR CHAT] Excepción al enviar webhook a {nombre_area}: {e}")
+
+    oficios_por_area = {area: df_area for area, df_area in df_nuevos.groupby('Area')}
+
+    for area, df_area in oficios_por_area.items():
         
-        if response.status_code == 200:
-            print("[CHAT] 🔔 Mensaje enviado exitosamente a Google Chat.")
-        else:
-            print(f"[ERROR CHAT] Fallo al enviar mensaje. HTTP Status: {response.status_code}")
-            print(response.text)
-    except Exception as e:
-        print(f"[ERROR CHAT] Excepción al enviar webhook: {e}")
+        oficios = df_area.to_dict(orient='records')
+        lineas = [f"<b>• {dato['Oficio CNBV']}</b> - {dato['Area']}" for dato in oficios]
+        texto_oficios = "<br>".join(lineas)
+
+        cantidad = len(oficios)
+        texto_header = f"Se han guardado {cantidad} oficio{'s' if cantidad > 1 else ''} nuevo{'s' if cantidad > 1 else ''}:"
+
+        payload_tarjeta = {
+            "cardsV2": [{
+                "cardId": f"alerta_{area}",
+                "card": {
+                    "header": {
+                        "title": f"¡Nuevos Rechazos: {area}!", # Título más descriptivo
+                        "subtitle": "Origen: CNBV",
+                        "imageUrl": "https://img.icons8.com/color/48/000000/high-importance--v1.png",
+                        "imageType": "CIRCLE"
+                    },
+                    "sections": [{
+                        "header": texto_header,
+                        "widgets": [
+                            {"textParagraph": {"text": texto_oficios}},
+                            {"buttonList": {"buttons": [{
+                                "text": "Abrir Hoja de Monitoreo", 
+                                "onClick": {"openLink": {"url": URLS['SHEET_MONITOREO']}}
+                            }]}}
+                        ]
+                    }]
+                }
+            }]
+        }
+
+        urls_destino = rutas_webhooks.get(area, [])
+        
+        if not urls_destino:
+            print(f"[WARN] El área '{area}' no tiene webhooks asignados en las rutas.")
+            continue
+
+        for url in urls_destino:
+            despachar_mensaje(url, payload_tarjeta, area)
 
 def notificar_novedades(nuevos_registros):
     try:
@@ -259,7 +292,7 @@ async def extraer_datos_web():
 
 # ================= BUCLE PRINCIPAL =================
 async def main_loop():
-    print("🤖 Bot iniciado. Ctrl+C para detener.")
+    print("Bot iniciado. Ctrl+C para detener.")
     try:
         df_resultado = await extraer_datos_web()
         
@@ -268,7 +301,7 @@ async def main_loop():
             procesar_datos(df_resultado)
         
     except KeyboardInterrupt:
-        print("\n🛑 Bot detenido por usuario.")
+        print("\nBot detenido por usuario.")
     except Exception as e:
         print(f"[ERROR GLOBAL] {e}")
 
