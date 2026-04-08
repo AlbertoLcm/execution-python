@@ -78,9 +78,9 @@ def enviar_alerta_chat(df_nuevos):
         return
     
     rutas_webhooks = {
-        # 'Hacendario': [webhook_hac],
+        'Hacendario': [webhook_hac],
         'Operaciones Ilícitas': [webhook_esp, webhook_aseg], 
-        # 'Aseguramiento': [webhook_aseg],
+        'Aseguramiento': [webhook_aseg],
     }
 
     def despachar_mensaje(url, payload, nombre_area):
@@ -210,7 +210,7 @@ async def extraer_datos_web():
     # Es necesario importar StringIO arriba: from io import StringIO
 
     async with async_playwright() as p:
-        browser = await p.chromium.launch(headless=False)
+        browser = await p.chromium.launch(headless=True)
         context = await browser.new_context()
         page = await context.new_page()
 
