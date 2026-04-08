@@ -210,7 +210,7 @@ async def extraer_datos_web():
     # Es necesario importar StringIO arriba: from io import StringIO
 
     async with async_playwright() as p:
-        browser = await p.chromium.launch(headless=True)
+        browser = await p.chromium.launch(headless=False)
         context = await browser.new_context()
         page = await context.new_page()
 
@@ -245,31 +245,36 @@ async def extraer_datos_web():
 
                     # 3. Esperar tabla
                     try:
-                        await page.wait_for_selector("#ctl00_DefaultPlaceholder_GridResult", state="visible", timeout=8000)
+                        await page.wait_for_function(
+                                """() => {
+                                    const rows = document.querySelectorAll("#ctl00_DefaultPlaceholder_GridResult tr");
+                                    return rows.length >= 2;
+                                }""",
+                                timeout=1_000
+                            )
+                        
                     except Exception:
                         print(f"   [WARN] No hay tabla para {area} (Timeout o sin datos).")
                         continue 
 
-                    # 4. Validar Caption (Tu código corregido)
-                    locator = page.locator("#ctl00_DefaultPlaceholder_GridResult caption div b")
-                    
-                    # Verifica si existe el caption antes de leer (para evitar error si la tabla cargó raro)
-                    if await locator.count() > 0:
-                        caption_info = await locator.inner_text()
-                        if '0 requerimiento(s)' in caption_info.strip().lower():
-                            print(f"   [INFO] 0 Requerimientos para {area}")
-                            continue
-                    
-                    # 5. Extracción
-                    html = await page.inner_html("#ctl00_DefaultPlaceholder_GridResult")
-                    
-                    # Parseo
-                    # Nota: Read_html devuelve una lista, tomamos el [0]
-                    dfs = pd.read_html(StringIO(f"<table>{html}</table>"))[0]
+                    datos_tabla = await page.evaluate(
+                        """() => {
+                            const rows = Array.from(document.querySelectorAll("#ctl00_DefaultPlaceholder_GridResult tbody tr")).slice(1);
+                            return rows.map(tr => {
+                                const celdas = Array.from(tr.querySelectorAll('td')).map(td => td.innerText.trim());
+                                return celdas;
+                            });
+                            }""",
+                    )
+
+                    columnas = ["Check", "Folio", "Año", "Oficio CNBV", "Expediente", "ComentarioRechazo", "Fecha de rechazo", "Ver mas"]
+
+                    dfs = pd.DataFrame(datos_tabla, columns=columnas)
+
                     dfs['Area'] = area 
                     
                     # Limpieza
-                    cols_to_drop = [c for c in ["Unnamed: 0", "Comentario Rechazo"] if c in dfs.columns]
+                    cols_to_drop = [c for c in ["Check", "Ver mas"] if c in dfs.columns]
                     dfs = dfs.drop(columns=cols_to_drop)
                     
                     data_list.append(dfs)
