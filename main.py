@@ -210,7 +210,7 @@ async def extraer_datos_web():
     # Es necesario importar StringIO arriba: from io import StringIO
 
     async with async_playwright() as p:
-        browser = await p.chromium.launch(headless=True)
+        browser = await p.chromium.launch(headless=False)
         context = await browser.new_context()
         page = await context.new_page()
 
@@ -254,8 +254,10 @@ async def extraer_datos_web():
                             )
                         
                     except Exception:
-                        print(f"   [WARN] No hay tabla para {area} (Timeout o sin datos).")
+                        print(f"   [WARN] Tabla {area} sin datos.")
                         continue 
+
+                    columnas = ["Check", "Folio", "Año", "Oficio CNBV", "Expediente", "ComentarioRechazo", "Fecha de rechazo", "Ver mas"]
 
                     datos_tabla = await page.evaluate(
                         """() => {
@@ -267,18 +269,17 @@ async def extraer_datos_web():
                             }""",
                     )
 
-                    columnas = ["Check", "Folio", "Año", "Oficio CNBV", "Expediente", "ComentarioRechazo", "Fecha de rechazo", "Ver mas"]
+                    if datos_tabla:
+                        dfs = pd.DataFrame(datos_tabla, columns=columnas)
 
-                    dfs = pd.DataFrame(datos_tabla, columns=columnas)
-
-                    dfs['Area'] = area 
-                    
-                    # Limpieza
-                    cols_to_drop = [c for c in ["Check", "Ver mas"] if c in dfs.columns]
-                    dfs = dfs.drop(columns=cols_to_drop)
-                    
-                    data_list.append(dfs)
-                    print(f"   [OK] {len(dfs)} registros extraídos.")
+                        dfs['Area'] = area 
+                        
+                        # Limpieza
+                        cols_to_drop = [c for c in ["Check", "Ver mas"] if c in dfs.columns]
+                        dfs = dfs.drop(columns=cols_to_drop)
+                        
+                        data_list.append(dfs)
+                        print(f"   [OK] {len(dfs)} registros extraídos.")
                     
                 except Exception as e_area:
                     print(f"   [ERROR AREA] Fallo procesando {area}: {e_area}")
