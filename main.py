@@ -9,8 +9,7 @@ from gspread_dataframe import set_with_dataframe
 import os
 from dotenv import load_dotenv
 import requests
-import json
-
+import sys
 
 # Cargar las variables del archivo .env al entorno del sistema
 load_dotenv()
@@ -298,7 +297,14 @@ async def extraer_datos_web():
 
 # ================= BUCLE PRINCIPAL =================
 async def main_loop():
-    print("Bot iniciado. Ctrl+C para detener.")
+    hora_actual = datetime.now()
+
+    if hora_actual.weekday() >= 5:
+        print(f"[{hora_actual}] Es fin de semana en CDMX. Deteniendo ejecución.")
+        sys.exit(0)
+
+    print(f"[{hora_actual}] Ejecutando web scraping...")
+
     try:
         df_resultado = await extraer_datos_web()
         
