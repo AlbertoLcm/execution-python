@@ -11,7 +11,6 @@ from dotenv import load_dotenv
 import requests
 import sys
 
-# Cargar las variables del archivo .env al entorno del sistema
 load_dotenv()
 # ================= CONFIGURACIÓN SEGURA =================
 CONFIG = {
@@ -110,7 +109,7 @@ def enviar_alerta_chat(df_nuevos):
                 "cardId": f"alerta_{area}",
                 "card": {
                     "header": {
-                        "title": f"¡Nuevos Rechazos: {area}!", # Título más descriptivo
+                        "title": f"¡Nuevos Rechazos: {area}!",
                         "subtitle": "Origen: CNBV",
                         "imageUrl": "https://img.icons8.com/color/48/000000/high-importance--v1.png",
                         "imageType": "CIRCLE"
@@ -163,19 +162,17 @@ def procesar_datos(df_nuevo):
         spreadsheet = gc.open_by_key(CONFIG['SHEET_ID'])
         worksheet = spreadsheet.worksheet("Resultados")
         
-        # Obtenemos solo la columna de Folios existentes para comparar (más rápido que bajar todo)
-        # Asumiendo que 'Folio' está en la columna A (índice 1). Ajustar si es diferente.
-        # Si no, bajamos todo el dataframe como hacías antes:
         datos_existentes = worksheet.get_all_records()
         df_existente = pd.DataFrame(datos_existentes)
         
-        col_id = "Folio"
+        df_existente['FolioID'] = df_existente['Folio'].astype(str) + "-" + df_existente['Fecha de rechazo']
+        df_nuevo['FolioID'] = df_nuevo['Folio'].astype(str) + "-" + df_nuevo['Fecha de rechazo']
+
+        col_id = "FolioID"
         nuevos_reales = pd.DataFrame()
 
         if not df_existente.empty and col_id in df_existente.columns and col_id in df_nuevo.columns:
-            # Convertir a string para asegurar match
             existentes_ids = set(df_existente[col_id].astype(str))
-            # Filtramos lo que NO esté en existentes
             nuevos_reales = df_nuevo[~df_nuevo[col_id].astype(str).isin(existentes_ids)]
         else:
             nuevos_reales = df_nuevo
@@ -183,17 +180,13 @@ def procesar_datos(df_nuevo):
         if not nuevos_reales.empty:
             print(f"[DATOS] 💡 Se encontraron {len(nuevos_reales)} registros realmente nuevos.")
             
-            # Append eficiente: Escribimos al final de la hoja existente
-            # include_column_header=False para no repetir títulos
-            row_to_start = len(df_existente) + 2 # +1 por header, +1 para la siguiente fila vacía
+            row_to_start = len(df_existente) + 2 
             set_with_dataframe(worksheet, nuevos_reales, row=row_to_start, include_column_header=False)
             
             print(f"[EXITO] ✅ Datos guardados.")
             
-            # Notificar
             notificar_novedades(nuevos_reales)
 
-            # Enviar Chat
             enviar_alerta_chat(nuevos_reales)
         else:
             print("[INFO] zzz Los datos escaneados ya existen en la base.")
@@ -206,8 +199,6 @@ async def extraer_datos_web():
     print(f"\n[{datetime.now().strftime('%H:%M:%S')}] Iniciando escaneo web...")
     data_list = []
     
-    # Es necesario importar StringIO arriba: from io import StringIO
-
     async with async_playwright() as p:
         browser = await p.chromium.launch(headless=True)
         context = await browser.new_context()
@@ -230,11 +221,9 @@ async def extraer_datos_web():
             for area in areas:
                 print(f"--- Consultando: {area} ---")
                 try:
-                    # 1. Selecciones
                     await page.select_option("#ctl00_DefaultPlaceholder_ComboBoxAreas", label=area)
                     await page.select_option("#ctl00_DefaultPlaceholder_ComboBoxTipoRespuesta", label="Rechazos")
                     
-                    # 2. ESTRATEGIA ANTI-DATOS FANTASMA
                     # Creamos una promesa que espera a que haya una respuesta de red tras el click.
                     # Esto es vital en ASP.NET para asegurar que el servidor respondió antes de leer la tabla.
                     async with page.expect_response(lambda response: response.status == 200, timeout=10000) as response_info:
@@ -242,7 +231,6 @@ async def extraer_datos_web():
                     
                     await asyncio.sleep(0.5)
 
-                    # 3. Esperar tabla
                     try:
                         await page.wait_for_function(
                                 """() => {
@@ -273,7 +261,6 @@ async def extraer_datos_web():
 
                         dfs['Area'] = area 
                         
-                        # Limpieza
                         cols_to_drop = [c for c in ["Check", "Ver mas"] if c in dfs.columns]
                         dfs = dfs.drop(columns=cols_to_drop)
                         
@@ -309,7 +296,6 @@ async def main_loop():
         df_resultado = await extraer_datos_web()
         
         if not df_resultado.empty:
-            # Ejecutar procesamiento síncrono
             procesar_datos(df_resultado)
         
     except KeyboardInterrupt:
