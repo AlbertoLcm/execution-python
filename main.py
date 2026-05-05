@@ -20,6 +20,7 @@ CONFIG = {
     "CNBV_PASS": os.getenv("CNBV_PASS"),
     "URL_LOGIN": os.getenv("URL_LOGIN"),
     "URL_CONSULTA": os.getenv("URL_CONSULTA"),
+    "URL_FUERA_SERVICIO": os.getenv("URL_FUERA_SERVICIO"),
     "CHAT_WEBHOOK_DATA": os.getenv("CHAT_WEBHOOK_DATA"),
     "CHAT_WEBHOOK_ESP": os.getenv("CHAT_WEBHOOK_ESP"),
     "CHAT_WEBHOOK_HAC": os.getenv("CHAT_WEBHOOK_HAC"),
@@ -29,6 +30,7 @@ CONFIG = {
 URLS = {
     "LOGIN": CONFIG['URL_LOGIN'],
     "CONSULTA": CONFIG['URL_CONSULTA'],
+    "FUERA_SERVICIO": CONFIG['URL_FUERA_SERVICIO'],
     "SHEET_BASE": f"https://docs.google.com/spreadsheets/d/{CONFIG['SHEET_ID']}",
     "SHEET_MONITOREO": f"https://docs.google.com/spreadsheets/d/{CONFIG['SHEET_ID_MONITOREO']}"
 }
@@ -214,7 +216,11 @@ async def extraer_datos_web():
                 await page.click("input[type='submit']")
 
             # --- NAVEGACIÓN A CONSULTA ---
-            await page.goto(URLS["CONSULTA"])
+            await page.goto(URLS["CONSULTA"], wait_until="domcontentloaded", timeout=5_000)
+            
+            if URLS['FUERA_SERVICIO'] in page.url:
+                print(f"[INFO] Portal Fuera de Horario de Operación.")
+                return pd.DataFrame()
             
             areas = ['Hacendario', 'Judicial', 'Aseguramiento', 'Operaciones Ilícitas']
             
